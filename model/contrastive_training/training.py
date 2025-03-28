@@ -14,8 +14,8 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-BATCH_SIZE = 16
-EPOCHS = 10
+BATCH_SIZE = 64
+EPOCHS = 1
 
 data = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
 contrastive_data = ContrastiveDataset(data)
@@ -59,10 +59,13 @@ with torch.no_grad():
         img1, img2, label = img1.to(device), img2.to(device), label.to(device)
 
         output1, output2 = model(img1, img2)
-        distance = F.pairwise_distance(output1, output2, keepdim=True)
+        distance = F.pairwise_distance(output1, output2)
 
         predictions = (distance < 0.5).float()
-        correct += (predictions.squeeze() == label).sum().item()
-        total += label.size(0)
+        label = label.squeeze()  # Fix label shape
+
+        correct += (predictions == label).sum().item()
+        total += label.numel()  # Ensure total is correct
 
 accuracy = 100 * correct / total
+print(f"Model Accuracy: {accuracy:.2f}%")
