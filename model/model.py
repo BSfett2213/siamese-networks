@@ -22,7 +22,7 @@ class SiameseNetwork(nn.Module):
         )
 
         self.fc = nn.Sequential(
-            nn.Linear(256 * 3 * 3, 512),
+            nn.Linear(36864, 512),
             nn.ReLU(),
             nn.Linear(512, 256),
             nn.ReLU(),
@@ -31,7 +31,7 @@ class SiameseNetwork(nn.Module):
 
     def forward_image(self, x):
         x = self.cnn(x)
-        x = x.view(x.size(0), -1)
+        x = torch.flatten(x, start_dim=1)
         x = self.fc(x)
         return x
 
