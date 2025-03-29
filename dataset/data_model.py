@@ -36,3 +36,37 @@ class ContrastiveDataset(Dataset):
 
     def get_dataloader(self, batch_size):
         return DataLoader(self, batch_size=batch_size, shuffle=True)
+
+
+class TripletDataset(Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+        self.labels_to_indices = self._group_by_label()
+
+    def _group_by_label(self):
+        labels_to_indices = {}
+        for idx, (_, label) in enumerate(self.dataset.samples):
+            if label not in labels_to_indices:
+                labels_to_indices[label] = []
+            labels_to_indices[label].append(idx)
+        return labels_to_indices
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        anchor_img, anchor_label = self.dataset[index]
+
+        positive_idx = index
+        while positive_idx == index:
+            positive_idx = random.choice(self.labels_to_indices[anchor_label])
+        positive_img, _ = self.dataset[positive_idx]
+
+        negative_label = random.choice([lbl for lbl in self.labels_to_indices if lbl != anchor_label])
+        negative_idx = random.choice(self.labels_to_indices[negative_label])
+        negative_img, _ = self.dataset[negative_idx]
+
+        return anchor_img, positive_img, negative_img
+
+    def get_dataloader(self, batch_size):
+        return DataLoader(self, batch_size=batch_size, shuffle=True)
