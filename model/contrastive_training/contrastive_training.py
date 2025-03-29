@@ -21,7 +21,7 @@ transform = transforms.Compose([
 
 # Hyperparameters
 BATCH_SIZE = 96
-EPOCHS = 5
+EPOCHS = 10
 MARGIN = 0.2 ** 0.5
 
 data = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
