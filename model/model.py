@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torchvision import transforms
+import torch.nn.functional as F
 
 
 class SiameseNetwork(nn.Module):
@@ -23,9 +22,13 @@ class SiameseNetwork(nn.Module):
 
         self.fc = nn.Sequential(
             nn.Linear(36864, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(512, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(256, 128)
         )
 
@@ -33,7 +36,7 @@ class SiameseNetwork(nn.Module):
         x = self.cnn(x)
         x = torch.flatten(x, start_dim=1)
         x = self.fc(x)
-        return x
+        return F.normalize(x, p=2, dim=1)
 
     def forward(self, image1, image2):
         output1 = self.forward_image(image1)
