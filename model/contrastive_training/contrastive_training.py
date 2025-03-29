@@ -1,8 +1,10 @@
+import numpy as np
 import torch
 import time
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import StepLR
 from torchvision import transforms
 from model.model import SiameseNetwork
 from torchvision.datasets import ImageFolder
@@ -15,24 +17,29 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
+# Hyperparameters
 BATCH_SIZE = 64
 EPOCHS = 15
+MARGIN = 1.5
 
 data = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
-contrastive_data = ContrastiveDataset(data)
-contrastive_loader = contrastive_data.get_dataloader(BATCH_SIZE)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = SiameseNetwork().to(device)
-criterion = ContrastiveLoss().to(device)
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+criterion = ContrastiveLoss(margin=MARGIN).to(device)
+optimizer = optim.Adam(model.parameters(), lr=0.01)
+scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
+
+contrastive_data = ContrastiveDataset(data, model, device)
+contrastive_loader = contrastive_data.get_dataloader(BATCH_SIZE)
 
 for epoch in range(EPOCHS):
     total_loss = 0
     epoch_start_time = time.time()
 
     for batch_idx, (img1, img2, label) in enumerate(contrastive_loader, 1):
+        print(f"\rBatch: {batch_idx}/{len(contrastive_loader)}", end="")
         img1, img2, label = img1.to(device), img2.to(device), label.to(device)
 
         optimizer.zero_grad()
@@ -54,8 +61,6 @@ for epoch in range(EPOCHS):
 model.eval()
 correct = 0
 total = 0
-
-
 distances = []
 labels = []
 
@@ -70,6 +75,8 @@ plt.hist(distances, bins=50, alpha=0.6, label="Distances")
 plt.legend(), plt.xlabel("Distance"), plt.ylabel("Frequency")
 plt.savefig("distances.svg", format="svg")
 
+# Testing Hyperparameters
+THRESHOLD = np.percentile(distances, 90)
 
 with torch.no_grad():
     for img1, img2, label in contrastive_loader:
@@ -78,7 +85,7 @@ with torch.no_grad():
         output1, output2 = model(img1, img2)
         distance = F.pairwise_distance(output1, output2)
 
-        predictions = (distance < 0.1).float()
+        predictions = (distance < THRESHOLD).float()
         label = label.squeeze()
 
         correct += (predictions == label).sum().item()
