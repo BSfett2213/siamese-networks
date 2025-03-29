@@ -1,12 +1,13 @@
 import torch
 import time
 import torch.optim as optim
+import matplotlib.pyplot as plt
 import torch.nn.functional as F
-from model.model import SiameseNetwork
-from dataset.data_model import ContrastiveDataset
-from model.loss_types import ContrastiveLoss
-from torchvision.datasets import ImageFolder
 from torchvision import transforms
+from model.model import SiameseNetwork
+from torchvision.datasets import ImageFolder
+from model.loss_types import ContrastiveLoss
+from dataset.data_model import ContrastiveDataset
 
 transform = transforms.Compose([
     transforms.Grayscale(),
@@ -15,7 +16,7 @@ transform = transforms.Compose([
 ])
 
 BATCH_SIZE = 64
-EPOCHS = 1
+EPOCHS = 15
 
 data = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
 contrastive_data = ContrastiveDataset(data)
@@ -54,6 +55,22 @@ model.eval()
 correct = 0
 total = 0
 
+
+distances = []
+labels = []
+
+with torch.no_grad():
+    for img1, img2, label in contrastive_loader:
+        img1, img2, label = img1.to(device), img2.to(device), label.to(device)
+        output1, output2 = model(img1, img2)
+        distances.extend(F.pairwise_distance(output1, output2).cpu().numpy())
+        labels.extend(label.squeeze().cpu().numpy())
+
+plt.hist(distances, bins=50, alpha=0.6, label="Distances")
+plt.legend(), plt.xlabel("Distance"), plt.ylabel("Frequency")
+plt.savefig("distances.svg", format="svg")
+
+
 with torch.no_grad():
     for img1, img2, label in contrastive_loader:
         img1, img2, label = img1.to(device), img2.to(device), label.to(device)
@@ -61,11 +78,11 @@ with torch.no_grad():
         output1, output2 = model(img1, img2)
         distance = F.pairwise_distance(output1, output2)
 
-        predictions = (distance < 0.5).float()
-        label = label.squeeze()  # Fix label shape
+        predictions = (distance < 0.1).float()
+        label = label.squeeze()
 
         correct += (predictions == label).sum().item()
-        total += label.numel()  # Ensure total is correct
+        total += label.numel()
 
 accuracy = 100 * correct / total
 print(f"Model Accuracy: {accuracy:.2f}%")
