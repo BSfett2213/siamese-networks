@@ -3,7 +3,6 @@ import torch
 import torchmetrics
 import numpy as np
 import torch.optim as optim
-import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from torchvision import transforms
 from model.model import SiameseNetwork
@@ -20,28 +19,42 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-
 # Hyperparameters
 BATCH_SIZE = 96
 EPOCHS = 5
 MARGIN = 0.2 ** 0.5
 
 data = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+train_size = int(0.8 * len(data))
+test_size = len(data) - train_size
+train_subset, test_subset = torch.utils.data.random_split(data, [train_size, test_size])
+
+train_dataset = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
+test_dataset = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
+
+train_dataset.samples = [data.samples[i] for i in train_subset.indices]
+test_dataset.samples = [data.samples[i] for i in test_subset.indices]
+
+train_dataset.targets = [label for _, label in train_dataset.samples]
+test_dataset.targets = [label for _, label in test_dataset.samples]
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = SiameseNetwork().to(device)
 criterion = ContrastiveLoss(margin=MARGIN).to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
-contrastive_data = ContrastiveDataset(data, model, device)
-contrastive_loader = contrastive_data.get_dataloader(BATCH_SIZE)
+training_data = ContrastiveDataset(train_dataset, model, device)
+testing_data = ContrastiveDataset(test_dataset, model, device)
+train_loader = training_data.get_dataloader(BATCH_SIZE)
+test_loader = testing_data.get_dataloader(BATCH_SIZE)
 
 for epoch in range(EPOCHS):
     total_loss = 0
     epoch_start_time = time.time()
 
-    for batch_idx, (img1, img2, label) in enumerate(contrastive_loader, 1):
-        print(f"\rBatch: {batch_idx}/{len(contrastive_loader)}", end="")
+    for batch_idx, (img1, img2, label) in enumerate(train_loader, 1):
+        print(f"\rBatch: {batch_idx}/{len(train_loader)}", end="")
         img1, img2, label = img1.to(device), img2.to(device), label.to(device)
 
         optimizer.zero_grad()
@@ -55,17 +68,16 @@ for epoch in range(EPOCHS):
     epoch_time = time.time() - epoch_start_time
     remaining_time = epoch_time * (EPOCHS - (epoch + 1))
     print("\n" + "-" * 50)
-    print(f"Epoch: {epoch + 1}/{EPOCHS}\nLoss: {total_loss / len(contrastive_loader):.4f}")
+    print(f"Epoch: {epoch + 1}/{EPOCHS}\nLoss: {total_loss / len(train_loader):.4f}")
     print(f"Time Taken: {epoch_time:.4f}s")
     print(f"Estimated Time to Finish: {remaining_time:.2f}s")
-    print("-" * 50)
 
     accuracy_metric = torchmetrics.Accuracy(task="binary").to(device)
     distances = []
     labels = []
 
     with torch.no_grad():
-        for img1, img2, label in contrastive_loader:
+        for img1, img2, label in test_loader:
             img1, img2, label = img1.to(device), img2.to(device), label.to(device)
             output1, output2 = model(img1, img2)
             distance = F.pairwise_distance(output1, output2)
@@ -78,20 +90,4 @@ for epoch in range(EPOCHS):
                                device=device)
     accuracy = accuracy_metric(predictions, labels)
     print(f"Model Accuracy: {accuracy.item() * 100:.2f}%")
-
-model.eval()
-correct = 0
-total = 0
-distances = []
-labels = []
-
-with torch.no_grad():
-    for img1, img2, label in contrastive_loader:
-        img1, img2, label = img1.to(device), img2.to(device), label.to(device)
-        output1, output2 = model(img1, img2)
-        distances.extend(F.pairwise_distance(output1, output2).cpu().numpy())
-        labels.extend(label.squeeze().cpu().numpy())
-
-plt.hist(distances, bins=50, alpha=0.6, label="Distances")
-plt.legend(), plt.xlabel("Distance"), plt.ylabel("Frequency")
-plt.savefig("distances.svg", format="svg")
+    print("-" * 50)
