@@ -1,32 +1,27 @@
-import matplotlib.pyplot as plt; import numpy as np; import pandas as pd
-#Loading results csv
-triplet_csv = pd.read_csv("../../model/triplet_training/triplet_results.csv")
-contrastive_csv = pd.read_csv("../../model/contrastive_training/contrastive_results.csv")
-# Plotting loss
-plt.figure(figsize = (10, 10))
-plt.subplot(2, 2, 1)
-plt.title("Triplet training Loss per Epoch")
-y_loss = np.array(triplet_csv['Loss'])
-plt.plot(y_loss, color = 'r', label = "Loss", linewidth = 2)
-plt.xlabel('Epochs'), plt.ylabel('Loss')
-plt.xlim(0, triplet_csv.Epoch.max())
-plt.legend()
-# Plotting Accuracy
-plt.subplot(2, 2, 2)
-plt.title("Triplet Training Accuracy per Epoch")
-y_acc = np.array(triplet_csv['Accuracy'])
-plt.plot(y_acc, color = 'y', label = "Accuracy", linewidth = 2)
-plt.xlabel('Epochs'), plt.ylabel('Accuracy')
-plt.xlim(0, triplet_csv.Epoch.max())
-plt.legend()
-plt.subplot(2, 2, 3)
-plt.title("Triplet Training Accuracy vs Contrastive Training Loss per Epoch")
-y_acc_contrastive = np.array(contrastive_csv['Accuracy'])
-plt.plot(y_acc, color = 'y', label = "Accuracy", linewidth = 2)
-plt.plot(y_acc_contrastive, color = 'black', label = "Accuracy", linewidth = 2)
-plt.xlabel('Epochs'), plt.ylabel('Accuracy')
-plt.xlim(0, triplet_csv.Epoch.max())
-plt.legend()
-plt.show()
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
 
+# Set seaborn style
+sns.set_theme(style="whitegrid")
+palette = sns.color_palette("husl", 2)
+triplet_csv = pd.read_csv("triplet_results.csv")
 
+# Plotting Triplet Loss
+plt.figure(figsize=(10, 6))
+sns.lineplot(x=triplet_csv['Epoch'], y=triplet_csv['Loss'], color=palette[0], label="Loss", linewidth=2.5, marker="o")
+plt.title("Triplet Training Loss per Epoch", fontsize=14, fontweight='bold')
+plt.xlabel("Epochs", fontsize=12), plt.ylabel("Loss", fontsize=12)
+plt.legend()
+plt.savefig("triplet_loss.svg", format='svg')
+plt.close()
+
+# Plotting Triplet Accuracy
+plt.figure(figsize=(10, 6))
+sns.lineplot(x=triplet_csv['Epoch'], y=triplet_csv['Accuracy'], color=palette[1], label="Accuracy", linewidth=2.5,
+             marker="o")
+plt.title("Triplet Training Accuracy per Epoch", fontsize=14, fontweight='bold')
+plt.xlabel("Epochs", fontsize=12), plt.ylabel("Accuracy", fontsize=12)
+plt.legend()
+plt.savefig("triplet_accuracy.svg", format='svg')
+plt.close()
