@@ -1,12 +1,25 @@
 import torch
-import time
-import torch.optim as optim
+import torch.nn as nn
 import torch.nn.functional as F
-from model.model import SiameseNetwork
-from dataset.data_model import TripletDataset
+from torchvision import models, transforms
+from torch.utils.data import DataLoader
+from dataset.data_model import TripletCosineDataset
 from model.loss_types import TripletCosineLoss
-from torchvision.datasets import ImageFolder
-from torchvision import transforms
+
+
+class SiameseNetwork(nn.Module):
+    def __init__(self, embedding_dim=128):
+        super(SiameseNetwork, self).__init__()
+        self.backbone = models.resnet18(pretrained=True)
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+        self.backbone.fc = nn.Linear(self.backbone.fc.in_features, embedding_dim)
+        self.normalize = nn.functional.normalize
+
+    def forward(self, x):
+        x = self.backbone(x)
+        return self.normalize(x, p=2, dim=1)
+
 
 transform = transforms.Compose([
     transforms.Resize((100, 100)),
@@ -16,63 +29,36 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-# Hyperparameters
-BATCH_SIZE = 64
-EPOCHS = 10
-MARGIN = 1.0
+dataset = TripletCosineDataset("../../dataset/extracted_faces", transform=transform)
+dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+model = SiameseNetwork()
+loss_fn = TripletCosineLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = SiameseNetwork().to(device)
-criterion = TripletCosineLoss(margin=MARGIN).to(device)
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-data = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
-triplet_data = TripletDataset(data, model, device)
-triplet_loader = triplet_data.get_dataloader(BATCH_SIZE)
-
-for epoch in range(EPOCHS):
+for epoch in range(10):
     total_loss = 0
-    epoch_start_time = time.time()
+    for anchor, positive, negative, _, _ in dataloader:
+        anchor_emb = model(anchor)
+        positive_emb = model(positive)
+        negative_emb = model(negative)
 
-    for batch_idx, (anchor, positive, negative) in enumerate(triplet_loader, 1):
-        print(f"\rBatch: {batch_idx}/{len(triplet_loader)}", end="")
-        anchor, positive, negative = anchor.to(device), positive.to(device), negative.to(device)
-
+        loss = loss_fn(anchor_emb, positive_emb, negative_emb)
         optimizer.zero_grad()
-        anchor_out, positive_out = model(anchor, positive)
-        _, negative_out = model(anchor, negative)
-
-        loss = criterion(anchor_out, positive_out, negative_out)
         loss.backward()
         optimizer.step()
-
         total_loss += loss.item()
 
-    epoch_time = time.time() - epoch_start_time
-    remaining_time = epoch_time * (EPOCHS - (epoch + 1))
-
-    print("\n" + "-" * 50)
-    print(f"Epoch: {epoch + 1}/{EPOCHS}\nLoss: {total_loss / len(triplet_loader):.4f}")
-    print(f"Time Taken: {epoch_time:.4f}s")
-    print(f"Estimated Time to Finish: {remaining_time:.2f}s")
-
-    model.eval()
+    print(f"Epoch [{epoch + 1}/10], Loss: {total_loss / len(dataloader):.4f}")
     correct = 0
     total = 0
-
+    model.eval()
     with torch.no_grad():
-        for anchor, positive, negative in triplet_loader:
-            anchor, positive, negative = anchor.to(device), positive.to(device), negative.to(device)
-
-            anchor_out, positive_out = model(anchor, positive)
-            _, negative_out = model(anchor, negative)
-
-            pos_sim = F.cosine_similarity(anchor_out, positive_out, dim=1)
-            neg_sim = F.cosine_similarity(anchor_out, negative_out, dim=1)
-
+        for anchor, positive, negative, anchor_class, negative_class in dataloader:
+            anchor_emb = model(anchor)
+            positive_emb = model(positive)
+            negative_emb = model(negative)
+            pos_sim = F.cosine_similarity(anchor_emb, positive_emb)
+            neg_sim = F.cosine_similarity(anchor_emb, negative_emb)
             correct += (pos_sim > neg_sim).sum().item()
             total += anchor.size(0)
-
-    accuracy = 100 * correct / total
-    print(f"Model Accuracy: {accuracy:.2f}%")
-    print("-" * 50)
+    print(f"Accuracy: {correct * 100 / total}")
