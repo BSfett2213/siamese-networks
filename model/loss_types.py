@@ -28,12 +28,12 @@ class TripletLoss(nn.Module):
 
 
 class TripletCosineLoss(nn.Module):
-    def __init__(self, margin=1.0):
+    def __init__(self, margin=0.2):
         super(TripletCosineLoss, self).__init__()
         self.margin = margin
 
     def forward(self, anchor, positive, negative):
-        pos_sim = F.cosine_similarity(anchor, positive, dim=1)
-        neg_sim = F.cosine_similarity(anchor, negative, dim=1)
-        loss = torch.clamp(self.margin - pos_sim + neg_sim, min=0).mean()
-        return loss
+        pos_sim = F.cosine_similarity(anchor, positive)
+        neg_sim = F.cosine_similarity(anchor, negative)
+        loss = torch.relu(neg_sim - pos_sim + self.margin)
+        return loss.mean()
