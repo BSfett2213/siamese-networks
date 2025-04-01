@@ -21,15 +21,15 @@ BATCH_SIZE = 64
 EPOCHS = 10
 MARGIN = 1.0
 
-data = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
-triplet_data = TripletDataset(data)
-triplet_loader = triplet_data.get_dataloader(BATCH_SIZE)
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 model = SiameseNetwork().to(device)
 criterion = TripletLoss(margin=MARGIN).to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+data = ImageFolder(root="../../dataset/extracted_faces", transform=transform)
+triplet_data = TripletDataset(data, model, device)
+triplet_loader = triplet_data.get_dataloader(BATCH_SIZE)
+
 
 for epoch in range(EPOCHS):
     total_loss = 0
