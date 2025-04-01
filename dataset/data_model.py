@@ -1,6 +1,8 @@
+import os
 import torch
 import random
 from torch.utils.data import Dataset, DataLoader
+from PIL import Image
 
 
 class ContrastiveDataset(Dataset):
@@ -62,17 +64,14 @@ class ContrastiveDataset(Dataset):
 
 
 class TripletDataset(Dataset):
-    def __init__(self, dataset):
+    def __init__(self, dataset, model, device):
         self.dataset = dataset
-        self.labels_to_indices = self._group_by_label()
+        self.device = device
+        self.model = model.to(device).eval()
 
-    def _group_by_label(self):
-        labels_to_indices = {}
-        for idx, (_, label) in enumerate(self.dataset.samples):
-            if label not in labels_to_indices:
-                labels_to_indices[label] = []
-            labels_to_indices[label].append(idx)
-        return labels_to_indices
+        self.labels_to_indices = {}
+        for idx, (_, label) in enumerate(dataset.samples):
+            self.labels_to_indices.setdefault(label, []).append(idx)
 
     def __len__(self):
         return len(self.dataset)
@@ -80,7 +79,7 @@ class TripletDataset(Dataset):
     def __getitem__(self, index):
         anchor_img, anchor_label = self.dataset[index]
 
-        positive_idx = index
+        positive_idx = random.choice(self.labels_to_indices[anchor_label])
         while positive_idx == index:
             positive_idx = random.choice(self.labels_to_indices[anchor_label])
         positive_img, _ = self.dataset[positive_idx]
@@ -92,4 +91,36 @@ class TripletDataset(Dataset):
         return anchor_img, positive_img, negative_img
 
     def get_dataloader(self, batch_size):
-        return DataLoader(self, batch_size=batch_size, shuffle=True)
+        return DataLoader(self, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
+
+
+class TripletCosineDataset(Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.classes = os.listdir(root_dir)
+        self.data = {cls: os.listdir(os.path.join(root_dir, cls)) for cls in self.classes}
+
+    def __getitem__(self, index):
+        anchor_class = random.choice(self.classes)
+        positive_class = anchor_class
+        negative_class = random.choice([cls for cls in self.classes if cls != anchor_class])
+
+        anchor_img = random.choice(self.data[anchor_class])
+        positive_img = random.choice(self.data[positive_class])
+        negative_img = random.choice(self.data[negative_class])
+
+        anchor = self.load_image(os.path.join(self.root_dir, anchor_class, anchor_img))
+        positive = self.load_image(os.path.join(self.root_dir, positive_class, positive_img))
+        negative = self.load_image(os.path.join(self.root_dir, negative_class, negative_img))
+
+        return anchor, positive, negative, anchor_class, negative_class
+
+    def load_image(self, path):
+        img = Image.open(path).convert('RGB')
+        if self.transform:
+            img = self.transform(img)
+        return img
+
+    def __len__(self):
+        return sum(len(files) for files in self.data.values())
