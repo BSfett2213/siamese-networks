@@ -18,18 +18,24 @@ class SiameseNetwork(nn.Module):
             nn.Conv2d(128, 256, 5, 1, 2),
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
+
+            nn.Conv2d(256, 512, 3, 1, 1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2)
         )
 
         self.fc = nn.Sequential(
-            nn.Linear(36864, 512),
+            nn.Linear(18432, 1024),
+            nn.BatchNorm1d(1024),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+
+            nn.Linear(1024, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(512, 256),
-            nn.BatchNorm1d(256),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(256, 128)
+
+            nn.Linear(512, 256)
         )
 
     def forward_image(self, x):
